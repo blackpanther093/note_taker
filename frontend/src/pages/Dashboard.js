@@ -35,6 +35,9 @@ export default function Dashboard() {
       const res = await entriesAPI.list({ page, sort: sortOrder, per_page: 20 });
       setTotalPages(res.data.pages);
 
+      // Keep dashboard counters responsive even if streak API is temporarily unavailable.
+      setStreak((prev) => ({ ...prev, total_entries: res.data.total || 0 }));
+
       // Decrypt entries client-side
       const decrypted = await Promise.all(
         res.data.entries.map(async (entry) => {
@@ -94,6 +97,13 @@ export default function Dashboard() {
       );
 
       setDecryptedEntries(decrypted);
+
+      try {
+        const streakRes = await entriesAPI.streak();
+        setStreak(streakRes.data);
+      } catch (streakErr) {
+        console.warn('Streak fetch failed:', streakErr);
+      }
     } catch (err) {
       console.error('Failed to fetch entries:', err);
     } finally {
@@ -108,7 +118,7 @@ export default function Dashboard() {
   useEffect(() => {
     entriesAPI.streak()
       .then(res => setStreak(res.data))
-      .catch(() => {});
+      .catch((err) => console.warn('Initial streak fetch failed:', err));
   }, []);
 
   // Filter entries by search (client-side since content is decrypted)

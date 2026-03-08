@@ -1,11 +1,19 @@
 import uuid
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from app import db
 from sqlalchemy.dialects.mysql import LONGBLOB
 
 
 def generate_uuid():
     return str(uuid.uuid4())
+
+
+IST = ZoneInfo('Asia/Kolkata')
+
+
+def now_ist():
+    return datetime.now(IST)
 
 
 class User(db.Model):
@@ -44,11 +52,11 @@ class JournalEntry(db.Model):
     )
     metadata_iv = db.Column(db.LargeBinary(12), nullable=True)
     entry_date = db.Column(db.Date, nullable=False)
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = db.Column(db.DateTime, default=now_ist)
     updated_at = db.Column(
         db.DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=now_ist,
+        onupdate=now_ist,
     )
 
     assets = db.relationship('EntryAsset', backref='entry', lazy='dynamic', cascade='all, delete-orphan')
@@ -72,7 +80,7 @@ class EntryAsset(db.Model):
     iv = db.Column(db.LargeBinary(12), nullable=False)
     asset_type = db.Column(db.String(50), nullable=False)
     file_size = db.Column(db.Integer, nullable=False)
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = db.Column(db.DateTime, default=now_ist)
 
     __table_args__ = (
         db.Index('idx_entry', 'entry_id'),
@@ -154,7 +162,7 @@ class SharedEntry(db.Model):
     )  # Title, mood, tags
     metadata_iv = db.Column(db.LargeBinary(12), nullable=True)
     allow_download = db.Column(db.Boolean, default=False)
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = db.Column(db.DateTime, default=now_ist)
     expires_at = db.Column(db.DateTime, nullable=True)  # Optional expiration
     view_count = db.Column(db.Integer, default=0)
 

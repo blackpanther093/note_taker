@@ -102,7 +102,8 @@ def get_share(share_id):
         'encrypted_content': share.encrypted_content.hex(),
         'iv': share.iv.hex(),
         'allow_download': share.allow_download,
-        'created_at': share.created_at.isoformat()
+        'created_at': share.created_at.isoformat(),
+        'view_count': share.view_count,
     }
     
     # Include encrypted metadata if available

@@ -4,6 +4,7 @@ import { sharesAPI } from '../api/client';
 import { decryptWithShareKey, base64ToArray } from '../crypto/encryption';
 import { Download, Lock } from 'lucide-react';
 import { downloadEntry } from '../utils/download';
+import { formatIST } from '../utils/timezone';
 
 export default function ShareView() {
   const { shareId } = useParams();
@@ -12,6 +13,8 @@ export default function ShareView() {
   const [entry, setEntry] = useState(null);
   const [metadata, setMetadata] = useState(null);
   const [allowDownload, setAllowDownload] = useState(false);
+  const [shareCreatedAt, setShareCreatedAt] = useState(null);
+  const [viewCount, setViewCount] = useState(0);
 
   useEffect(() => {
     const loadSharedEntry = async () => {
@@ -33,6 +36,8 @@ export default function ShareView() {
         // Fetch encrypted data from server
         const response = await sharesAPI.get(shareId);
         const data = response.data;
+        setShareCreatedAt(data.created_at || null);
+        setViewCount(data.view_count || 0);
 
         // Decrypt content client-side
         const decryptedContent = await decryptWithShareKey(
@@ -208,6 +213,10 @@ export default function ShareView() {
         <div>
           <h1>{metadata?.title || 'Shared Entry'}</h1>
           <p className="share-subtitle">Read-only shared note</p>
+          <div className="share-header-meta">
+            <span className="meta-chip">Views: {viewCount}</span>
+            {shareCreatedAt && <span className="meta-chip">Shared: {formatIST(shareCreatedAt, 'datetime')}</span>}
+          </div>
         </div>
         {allowDownload && (
           <button className="btn btn-primary" onClick={handleDownload}>

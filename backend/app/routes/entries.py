@@ -1,6 +1,7 @@
 """Journal entry routes."""
 import base64
-from datetime import datetime, date
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from flask import Blueprint, request, jsonify, current_app
 
@@ -11,6 +12,7 @@ from app.auth_utils import login_required
 entries_bp = Blueprint('entries', __name__)
 
 ENTRIES_PER_PAGE = 20
+IST = ZoneInfo('Asia/Kolkata')
 
 
 @entries_bp.route('', methods=['GET'])
@@ -313,52 +315,47 @@ def calendar_view(user_id, year, month):
 @login_required
 def get_streak(user_id):
     """Calculate the user's current writing streak."""
-    today = date.today()
+    # Use IST day boundaries so dashboard streak matches user expectation.
+    today_ist = datetime.now(IST).date()
 
-    # Get all dates with entries, ordered desc
-    dates = db.session.query(
-        DailyMetadata.entry_date
-    ).filter(
-        DailyMetadata.user_id == user_id,
-        DailyMetadata.has_entry == True,  # noqa: E712
-    ).order_by(DailyMetadata.entry_date.desc()).all()
+    # Build streak from actual entries (more reliable than derived metadata rows).
+    rows = db.session.query(JournalEntry.entry_date).filter(
+        JournalEntry.user_id == user_id,
+    ).distinct().order_by(JournalEntry.entry_date.asc()).all()
 
-    dates = [d[0] for d in dates]
+    entry_dates = [row[0] for row in rows]
+    total_entries = JournalEntry.query.filter_by(user_id=user_id).count()
 
-    if not dates:
-        return jsonify({'current_streak': 0, 'longest_streak': 0, 'total_entries': 0})
+    if not entry_dates:
+        return jsonify({'current_streak': 0, 'longest_streak': 0, 'total_entries': total_entries})
 
-    # Calculate current streak
+    entry_set = set(entry_dates)
+
+    # Current streak: consecutive days ending today. If no today entry, allow yesterday as day 1.
     current_streak = 0
-    check_date = today
-    for d in dates:
-        if d == check_date:
-            current_streak += 1
-            check_date = check_date - __import__('datetime').timedelta(days=1)
-        elif d < check_date:
-            # Allow one day gap (streak counts if yesterday has entry)
-            if current_streak == 0 and d == today - __import__('datetime').timedelta(days=1):
-                current_streak = 1
-                check_date = d - __import__('datetime').timedelta(days=1)
-            else:
-                break
+    cursor = today_ist
+    while cursor in entry_set:
+        current_streak += 1
+        cursor -= timedelta(days=1)
 
-    # Calculate longest streak
-    longest = 0
-    streak = 1
-    for i in range(1, len(dates)):
-        diff = (dates[i - 1] - dates[i]).days
-        if diff == 1:
-            streak += 1
+    if current_streak == 0 and (today_ist - timedelta(days=1)) in entry_set:
+        current_streak = 1
+
+    # Longest streak across all distinct entry dates.
+    longest_streak = 1
+    running = 1
+    for i in range(1, len(entry_dates)):
+        if (entry_dates[i] - entry_dates[i - 1]).days == 1:
+            running += 1
         else:
-            longest = max(longest, streak)
-            streak = 1
-    longest = max(longest, streak)
-
-    total = JournalEntry.query.filter_by(user_id=user_id).count()
+            if running > longest_streak:
+                longest_streak = running
+            running = 1
+    if running > longest_streak:
+        longest_streak = running
 
     return jsonify({
         'current_streak': current_streak,
-        'longest_streak': longest,
-        'total_entries': total,
+        'longest_streak': longest_streak,
+        'total_entries': total_entries,
     })

@@ -19,6 +19,7 @@ import {
   generateShareKey,
   encryptWithShareKey,
   arrayToBase64,
+  base64ToArray,
 } from '../crypto/encryption';
 import {
   ArrowLeft, Save, Bold, Italic, Underline as UnderlineIcon,
@@ -61,6 +62,30 @@ const BG_PATTERNS = [
   { name: 'Lines', value: 'repeating-linear-gradient(0deg, transparent, transparent 19px, #eee 19px, #eee 20px)' },
   { name: 'Grid', value: 'linear-gradient(#eee 1px, transparent 1px), linear-gradient(90deg, #eee 1px, transparent 1px)' },
 ];
+
+const SHARE_KEY_STORE = 'share_keys_by_entry_v1';
+
+function toBase64Url(b64) {
+  return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function fromBase64Url(token) {
+  const normalized = token.replace(/-/g, '+').replace(/_/g, '/');
+  return normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
+}
+
+function readShareStore() {
+  try {
+    const raw = localStorage.getItem(SHARE_KEY_STORE);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeShareStore(store) {
+  localStorage.setItem(SHARE_KEY_STORE, JSON.stringify(store));
+}
 
 function hexToRgb(hex) {
   if (typeof hex !== 'string') return null;
@@ -378,6 +403,29 @@ export default function EntryEditor() {
         await entriesAPI.update(entryId, payload);
       }
 
+      // Keep shared link content in sync with latest edits when share key is available locally.
+      try {
+        const shareStore = readShareStore();
+        const shareInfo = shareStore[entryId];
+        if (shareInfo?.key) {
+          const shareKey = base64ToArray(fromBase64Url(shareInfo.key));
+          const shareContent = await encryptWithShareKey(contentPayload, shareKey);
+          const shareMeta = await encryptWithShareKey(JSON.stringify(metadata), shareKey);
+
+          await sharesAPI.create({
+            entry_id: entryId,
+            encrypted_content: shareContent.encrypted_content,
+            iv: shareContent.iv,
+            encrypted_metadata: shareMeta.encrypted_content,
+            metadata_iv: shareMeta.iv,
+            allow_download: !!shareInfo.allowDownload,
+          });
+        }
+      } catch (shareSyncErr) {
+        // Non-blocking: entry save already succeeded.
+        console.warn('Share sync skipped:', shareSyncErr);
+      }
+
       lastSavedSnapshotRef.current = buildSnapshot(editor.getJSON());
       hydrationRef.current = false;
       setHasUnsavedChanges(false);
@@ -474,7 +522,11 @@ export default function EntryEditor() {
     setSharing(true);
 
     try {
-      const shareKey = generateShareKey();
+      const shareStore = readShareStore();
+      const existing = shareStore[entryId];
+      const shareKey = existing?.key
+        ? base64ToArray(fromBase64Url(existing.key))
+        : generateShareKey();
       const contentPayload = JSON.stringify({
         editorContent: editor.getJSON(),
         bgColor,
@@ -505,10 +557,16 @@ export default function EntryEditor() {
         allow_download: allowDownload,
       });
 
-      const shareKeyBase64Url = arrayToBase64(shareKey)
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=+$/g, '');
+      const shareKeyBase64Url = toBase64Url(arrayToBase64(shareKey));
+
+      // Persist share key locally for live share sync during future saves.
+      shareStore[entryId] = {
+        shareId: response.data.share_id,
+        key: shareKeyBase64Url,
+        allowDownload,
+      };
+      writeShareStore(shareStore);
+
       const baseUrl = window.location.origin;
       const link = `${baseUrl}/share/${response.data.share_id}#k=${shareKeyBase64Url}`;
       setShareLink(link);
@@ -638,68 +696,99 @@ export default function EntryEditor() {
     navigate('/');
   }, [hasUnsavedChanges, navigate]);
 
+  const uploadEditorImage = useCallback(async (file) => {
+    if (!file) return;
+
+    // Validate file size (10MB max)
+    if (file.size > 10 * 1024 * 1024) {
+      alert('Image too large. Maximum size is 10MB.');
+      return;
+    }
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      alert('Unsupported image type.');
+      return;
+    }
+
+    try {
+      // Ensure entry exists before uploading assets
+      if (isNew || hasUnsavedChanges) {
+        await handleSave();
+      }
+
+      const arrayBuffer = await file.arrayBuffer();
+      const fileBytes = new Uint8Array(arrayBuffer);
+      const assetId = generateUUID();
+
+      // Encrypt the image
+      const { encrypted_data, iv } = await encryptAsset(
+        fileBytes,
+        encryptionKey,
+        entryId,
+        assetId
+      );
+
+      // Upload encrypted image
+      await assetsAPI.upload({
+        entry_id: entryId,
+        encrypted_data,
+        iv,
+        asset_type: file.type,
+        file_size: file.size,
+      });
+
+      // For display, convert to base64 data URL (stays in browser only)
+      const reader = new FileReader();
+      reader.onload = () => {
+        editor.chain().focus().setImage({ src: reader.result, width: 640, fit: 'contain' }).run();
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Failed to upload image:', err);
+      alert('Failed to upload image: ' + (err.response?.data?.error || err.message));
+    }
+  }, [isNew, hasUnsavedChanges, handleSave, encryptionKey, entryId, editor]);
+
   const handleImageUpload = async () => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/jpeg,image/png,image/gif,image/webp';
     input.onchange = async (e) => {
       const file = e.target.files[0];
-      if (!file) return;
-
-      // Validate file size (10MB max)
-      if (file.size > 10 * 1024 * 1024) {
-        alert('Image too large. Maximum size is 10MB.');
-        return;
-      }
-
-      // Validate file type
-      const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-      if (!allowedTypes.includes(file.type)) {
-        alert('Unsupported image type.');
-        return;
-      }
-
-      try {
-        // CRITICAL: Save entry first if it's new or has unsaved changes
-        // Backend requires entry to exist in database before accepting assets
-        if (isNew || hasUnsavedChanges) {
-          await handleSave();
-        }
-
-        const arrayBuffer = await file.arrayBuffer();
-        const fileBytes = new Uint8Array(arrayBuffer);
-        const assetId = generateUUID();
-
-        // Encrypt the image
-        const { encrypted_data, iv } = await encryptAsset(
-          fileBytes,
-          encryptionKey,
-          entryId,
-          assetId
-        );
-
-        // Upload encrypted image
-        await assetsAPI.upload({
-          entry_id: entryId,
-          encrypted_data,
-          iv,
-          asset_type: file.type,
-          file_size: file.size,
-        });
-
-        // For display, convert to base64 data URL (stays in browser only)
-        const reader = new FileReader();
-        reader.onload = () => {
-          editor.chain().focus().setImage({ src: reader.result, width: 640, fit: 'contain' }).run();
-        };
-        reader.readAsDataURL(file);
-      } catch (err) {
-        console.error('Failed to upload image:', err);
-        alert('Failed to upload image: ' + (err.response?.data?.error || err.message));
-      }
+      await uploadEditorImage(file);
     };
     input.click();
   };
+
+  // Paste image support (Ctrl/Cmd+V and clipboard paste on supported browsers/devices)
+  useEffect(() => {
+    if (!editor) return;
+
+    const handlePasteImage = (event) => {
+      const items = event.clipboardData?.items;
+      if (!items || !items.length) return;
+
+      const imageItem = Array.from(items).find(
+        (item) => item.kind === 'file' && item.type.startsWith('image/')
+      );
+
+      if (!imageItem) return;
+
+      const file = imageItem.getAsFile();
+      if (!file) return;
+
+      event.preventDefault();
+      void uploadEditorImage(file);
+    };
+
+    const dom = editor.view.dom;
+    dom.addEventListener('paste', handlePasteImage);
+    return () => {
+      dom.removeEventListener('paste', handlePasteImage);
+    };
+  }, [editor, uploadEditorImage]);
 
   const handleBgImageUpload = () => {
     const input = document.createElement('input');
