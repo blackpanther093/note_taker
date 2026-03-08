@@ -11,6 +11,15 @@ from app import db
 from app.models import LoginAttempt, UserSession
 
 
+def _get_client_ip() -> str:
+    """Resolve client IP safely when behind reverse proxies (e.g., Render)."""
+    forwarded_for = request.headers.get('X-Forwarded-For', '')
+    if forwarded_for:
+        # Left-most value is the original client IP
+        return forwarded_for.split(',')[0].strip() or '0.0.0.0'
+    return request.remote_addr or '0.0.0.0'
+
+
 def _hash_user_agent(user_agent: str) -> str:
     """Create SHA256 hash of user agent for session binding."""
     return hashlib.sha256(user_agent.encode('utf-8')).hexdigest()
@@ -81,7 +90,7 @@ def create_session(user_id: str) -> str:
     
     user_session = UserSession(
         user_id=user_id,
-        ip_address=request.remote_addr or '0.0.0.0',
+        ip_address=_get_client_ip(),
         user_agent=user_agent,
         user_agent_hash=_hash_user_agent(user_agent) if user_agent else None,
         expires_at=datetime.now(timezone.utc) + lifetime,
@@ -129,8 +138,8 @@ def get_current_user_id() -> str | None:
         session.clear()
         return None
 
-    # Validate IP address (strict match)
-    current_ip = request.remote_addr or '0.0.0.0'
+    # Validate IP address (proxy-aware)
+    current_ip = _get_client_ip()
     if user_session.ip_address != current_ip:
         # IP mismatch - potential session hijacking
         db.session.delete(user_session)
