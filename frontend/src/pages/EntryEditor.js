@@ -170,14 +170,11 @@ export default function EntryEditor() {
 
   // Load existing entry
   const loadEntry = useCallback(async () => {
-    if (isNew || !editor) return;
+    if (isNew || !editor) return false;
     
     // Wait for encryption key if not available yet
     if (!encryptionKey) {
-      console.error('Encryption key not available');
-      alert('Session expired. Please log in again.');
-      navigate('/login');
-      return;
+      return false;
     }
     
     setLoading(true);
@@ -265,21 +262,37 @@ export default function EntryEditor() {
       });
       hydrationRef.current = false;
       setHasUnsavedChanges(false);
+      return true;
     } catch (err) {
       console.error('Failed to load entry:', err);
       alert('Failed to load entry');
       navigate('/');
+      return false;
     } finally {
       setLoading(false);
     }
   }, [id, isNew, encryptionKey, editor, navigate, buildSnapshot, defaultBgColor]);
 
   useEffect(() => {
-    if (editor && !isNew && !hasLoadedEntryRef.current) {
-      hasLoadedEntryRef.current = true;
-      loadEntry();
+    hasLoadedEntryRef.current = false;
+  }, [id]);
+
+  useEffect(() => {
+    if (!editor || isNew || authLoading || !encryptionKey || hasLoadedEntryRef.current) {
+      return;
     }
-  }, [editor, isNew, loadEntry]);
+
+    let isCancelled = false;
+    loadEntry().then((loaded) => {
+      if (!isCancelled && loaded) {
+        hasLoadedEntryRef.current = true;
+      }
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [editor, isNew, authLoading, encryptionKey, loadEntry]);
 
   useEffect(() => {
     if (!editor || !isNew) return;
