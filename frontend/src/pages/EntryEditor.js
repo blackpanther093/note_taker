@@ -731,7 +731,12 @@ export default function EntryEditor() {
       // For display, convert to base64 data URL (stays in browser only)
       const reader = new FileReader();
       reader.onload = () => {
-        editor.chain().focus().setImage({ src: reader.result, width: 640, fit: 'contain' }).run();
+        if (!editor || editor.isDestroyed) return;
+        try {
+          editor.chain().focus().setImage({ src: reader.result, width: 640, fit: 'contain' }).run();
+        } catch {
+          // Editor may unmount while async image read completes.
+        }
       };
       reader.readAsDataURL(file);
     } catch (err) {
@@ -756,6 +761,12 @@ export default function EntryEditor() {
     if (!editor) return;
 
     const handlePasteImage = (event) => {
+      const target = event.target;
+      // Only handle paste when focus is inside the editor.
+      if (!(target instanceof Element) || !target.closest('.journal-editor-content')) {
+        return;
+      }
+
       const items = event.clipboardData?.items;
       if (!items || !items.length) return;
 
@@ -772,23 +783,10 @@ export default function EntryEditor() {
       void uploadEditorImage(file);
     };
 
-    let dom = null;
-    try {
-      // TipTap can throw while view is not mounted yet; guard explicitly.
-      dom = editor.view?.dom || null;
-    } catch {
-      return undefined;
-    }
-
-    if (!dom) return undefined;
-
-    dom.addEventListener('paste', handlePasteImage);
+    // Use document-level listener to avoid direct view.dom access races.
+    document.addEventListener('paste', handlePasteImage);
     return () => {
-      try {
-        dom.removeEventListener('paste', handlePasteImage);
-      } catch {
-        // Ignore cleanup race if editor unmounts before listener removal.
-      }
+      document.removeEventListener('paste', handlePasteImage);
     };
   }, [editor, uploadEditorImage]);
 
