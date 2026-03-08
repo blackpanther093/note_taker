@@ -33,9 +33,15 @@ class JournalEntry(db.Model):
 
     id = db.Column(db.String(36), primary_key=True, default=generate_uuid)
     user_id = db.Column(db.String(36), db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
-    encrypted_content = db.Column(db.LargeBinary, nullable=False)  # MEDIUMBLOB
+    encrypted_content = db.Column(
+        db.LargeBinary().with_variant(LONGBLOB, 'mysql'),
+        nullable=False
+    )
     iv = db.Column(db.LargeBinary(12), nullable=False)
-    encrypted_metadata = db.Column(db.LargeBinary, nullable=True)  # encrypted title/mood/tags
+    encrypted_metadata = db.Column(
+        db.LargeBinary().with_variant(LONGBLOB, 'mysql'),
+        nullable=True
+    )
     metadata_iv = db.Column(db.LargeBinary(12), nullable=True)
     entry_date = db.Column(db.Date, nullable=False)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
