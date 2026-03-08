@@ -772,11 +772,23 @@ export default function EntryEditor() {
       void uploadEditorImage(file);
     };
 
-    const dom = editor?.view?.dom;
+    let dom = null;
+    try {
+      // TipTap can throw while view is not mounted yet; guard explicitly.
+      dom = editor.view?.dom || null;
+    } catch {
+      return undefined;
+    }
+
     if (!dom) return undefined;
+
     dom.addEventListener('paste', handlePasteImage);
     return () => {
-      dom.removeEventListener('paste', handlePasteImage);
+      try {
+        dom.removeEventListener('paste', handlePasteImage);
+      } catch {
+        // Ignore cleanup race if editor unmounts before listener removal.
+      }
     };
   }, [editor, uploadEditorImage]);
 
