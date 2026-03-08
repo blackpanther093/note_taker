@@ -90,11 +90,13 @@ def create_app(config_name=None):
     from app.routes.entries import entries_bp
     from app.routes.assets import assets_bp
     from app.routes.shares import shares_bp
+    from app.routes.admin import admin_bp
 
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(entries_bp, url_prefix='/api/entries')
     app.register_blueprint(assets_bp, url_prefix='/api/assets')
     app.register_blueprint(shares_bp, url_prefix='/api/shares')
+    app.register_blueprint(admin_bp, url_prefix='/api/admin')
 
     # API is consumed by SPA over CORS with credentialed sessions.
     # Exempt JSON API blueprints from Flask-WTF CSRF form checks to avoid

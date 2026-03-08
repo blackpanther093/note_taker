@@ -10,6 +10,9 @@ import CalendarView from './pages/CalendarView';
 import SettingsPage from './pages/SettingsPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
 import ShareView from './pages/ShareView';
+import AdminLogin from './pages/AdminLogin';
+import AdminDashboard from './pages/AdminDashboard';
+import AdminUsers from './pages/AdminUsers';
 import './App.css';
 
 function ProtectedRoute({ children }) {
@@ -46,7 +49,10 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
       <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
-        <Route path="/share/:shareId" element={<ShareView />} />
+      <Route path="/share/:shareId" element={<ShareView />} />
+      <Route path="/admin/login" element={<AdminLogin />} />
+      <Route path="/admin/dashboard" element={<AdminDashboard />} />
+      <Route path="/admin/users" element={<AdminUsers />} />
       <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/entry/new" element={<ProtectedRoute><EntryEditor /></ProtectedRoute>} />
       <Route path="/entry/:id" element={<ProtectedRoute><EntryEditor /></ProtectedRoute>} />

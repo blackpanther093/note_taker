@@ -33,6 +33,8 @@ class User(db.Model):
     key_salt = db.Column(db.LargeBinary(32), nullable=False)
     totp_secret = db.Column(db.String(255), nullable=True)
     totp_enabled = db.Column(db.Boolean, default=False)
+    is_active = db.Column(db.Boolean, default=True)
+    kicked_out_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(
         db.DateTime,
@@ -203,3 +205,37 @@ class UserShareVault(db.Model):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
+
+
+class Admin(db.Model):
+    __tablename__ = 'admins'
+
+    id = db.Column(db.String(36), primary_key=True, default=generate_uuid)
+    username = db.Column(db.String(255), unique=True, nullable=False, index=True)
+    password_hash = db.Column(db.String(255), nullable=False)
+    email = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(
+        db.DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    sessions = db.relationship('AdminSession', backref='admin', lazy='dynamic', cascade='all, delete-orphan')
+
+
+class AdminSession(db.Model):
+    __tablename__ = 'admin_sessions'
+
+    id = db.Column(db.String(36), primary_key=True, default=generate_uuid)
+    admin_id = db.Column(
+        db.String(36),
+        db.ForeignKey('admins.id', ondelete='CASCADE'),
+        nullable=False,
+        index=True,
+    )
+    session_token = db.Column(db.String(255), unique=True, nullable=False, index=True)
+    ip_address = db.Column(db.String(45), nullable=True)
+    user_agent = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    expires_at = db.Column(db.DateTime, nullable=False)

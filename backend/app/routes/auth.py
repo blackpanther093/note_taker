@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 import pyotp
 import qrcode
 import io
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify, session, current_app
 from flask_wtf.csrf import generate_csrf
 import sib_api_v3_sdk
 from sib_api_v3_sdk.rest import ApiException
@@ -303,6 +303,14 @@ def login():
         record_login_attempt(email, ip, success=False)
         return jsonify({'error': 'Invalid credentials'}), 401
 
+    # Check if user is active
+    if not user.is_active:
+        record_login_attempt(email, ip, success=False)
+        kick_message = "Your account has been deactivated by an administrator."
+        if user.kicked_out_at:
+            kick_message += f" Kicked out on {user.kicked_out_at.isoformat()}"
+        return jsonify({'error': kick_message, 'kicked_out': True}), 403
+
     # 2FA check
     if user.totp_enabled:
         if not totp_code:
@@ -357,16 +365,22 @@ def get_share_vault(user_id):
     The server stores only opaque ciphertext + IV.
     Decryption always happens client-side with a key derived from user's password.
     """
-    vault = UserShareVault.query.filter_by(user_id=user_id).first()
-    if not vault:
-        return jsonify({'exists': False}), 200
+    try:
+        vault = UserShareVault.query.filter_by(user_id=user_id).first()
+        if not vault:
+            return jsonify({'exists': False}), 200
 
-    return jsonify({
-        'exists': True,
-        'encrypted_vault': base64.b64encode(vault.encrypted_vault).decode(),
-        'iv': base64.b64encode(vault.iv).decode(),
-        'updated_at': vault.updated_at.isoformat() if vault.updated_at else None,
-    }), 200
+        return jsonify({
+            'exists': True,
+            'encrypted_vault': base64.b64encode(vault.encrypted_vault).decode(),
+            'iv': base64.b64encode(vault.iv).decode(),
+            'updated_at': vault.updated_at.isoformat() if vault.updated_at else None,
+        }), 200
+    except Exception as e:
+        # Table may not exist yet; return empty vault
+        if 'user_share_vaults' in str(e):
+            return jsonify({'exists': False}), 200
+        raise
 
 
 @auth_bp.route('/share-vault', methods=['PUT'])
@@ -398,16 +412,33 @@ def upsert_share_vault(user_id):
     if len(iv) != 12:
         return jsonify({'error': 'IV must be 12 bytes'}), 400
 
-    vault = UserShareVault.query.filter_by(user_id=user_id).first()
-    if not vault:
-        vault = UserShareVault(user_id=user_id, encrypted_vault=encrypted_vault, iv=iv)
-        db.session.add(vault)
-    else:
-        vault.encrypted_vault = encrypted_vault
-        vault.iv = iv
+    try:
+        vault = UserShareVault.query.filter_by(user_id=user_id).first()
+        if not vault:
+            vault = UserShareVault(user_id=user_id, encrypted_vault=encrypted_vault, iv=iv)
+            db.session.add(vault)
+        else:
+            vault.encrypted_vault = encrypted_vault
+            vault.iv = iv
 
-    db.session.commit()
-    return jsonify({'message': 'Share vault updated'}), 200
+        db.session.commit()
+        return jsonify({'message': 'Share vault updated'}), 200
+    except Exception as e:
+        db.session.rollback()
+        # If table doesn't exist, try to create it
+        if 'user_share_vaults' in str(e):
+            try:
+                from app.models import UserShareVault
+                UserShareVault.__table__.create(db.engine, checkfirst=True)
+                # Retry the insert
+                vault = UserShareVault(user_id=user_id, encrypted_vault=encrypted_vault, iv=iv)
+                db.session.add(vault)
+                db.session.commit()
+                return jsonify({'message': 'Share vault updated'}), 200
+            except Exception as create_err:
+                current_app.logger.error(f"Failed to create user_share_vaults table: {create_err}")
+                return jsonify({'error': 'Database sync required'}), 500
+        raise
 
 
 @auth_bp.route('/setup-2fa', methods=['POST'])
