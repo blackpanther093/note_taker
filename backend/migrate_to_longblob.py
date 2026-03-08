@@ -28,80 +28,38 @@ def get_db_url():
         query={'charset': 'utf8mb4'},
     )
 
-
-TARGET_COLUMNS = [
-    ('journal_entries', 'encrypted_content', 'LONGBLOB', False),
-    ('journal_entries', 'encrypted_metadata', 'LONGBLOB', True),
-    ('entry_assets', 'encrypted_data', 'LONGBLOB', False),
-]
-
-
-def get_column_type(conn, table_name, column_name, db_name):
-    """Return current MySQL column_type (e.g., blob/mediumblob/longblob)."""
-    row = conn.execute(
-        text(
-            """
-            SELECT column_type
-            FROM information_schema.columns
-            WHERE table_schema = :db_name
-              AND table_name = :table_name
-              AND column_name = :column_name
-            """
-        ),
-        {
-            'db_name': db_name,
-            'table_name': table_name,
-            'column_name': column_name,
-        },
-    ).fetchone()
-    return row[0] if row else None
-
-
 def migrate_to_longblob():
-    """Alter target columns from BLOB/MEDIUMBLOB to LONGBLOB."""
+    """Alter columns from BLOB/MEDIUMBLOB to LONGBLOB."""
     engine = create_engine(get_db_url())
-    db_name = os.environ.get('DB_NAME', 'my_journal')
-
+    
+    migrations = [
+        # Journal entries - encrypted content and metadata
+        "ALTER TABLE journal_entries MODIFY encrypted_content LONGBLOB NOT NULL",
+        "ALTER TABLE journal_entries MODIFY encrypted_metadata LONGBLOB",
+        
+        # Entry assets - encrypted image data
+        "ALTER TABLE entry_assets MODIFY encrypted_data LONGBLOB NOT NULL",
+    ]
+    
     print("Starting LONGBLOB migration...")
-
+    
     with engine.connect() as conn:
-        for i, (table_name, column_name, target_type, nullable) in enumerate(TARGET_COLUMNS, 1):
-            current_type = get_column_type(conn, table_name, column_name, db_name)
-
-            if current_type is None:
-                print(f"[{i}/{len(TARGET_COLUMNS)}] {table_name}.{column_name}: not found, skipping")
-                continue
-
-            print(
-                f"[{i}/{len(TARGET_COLUMNS)}] {table_name}.{column_name}: "
-                f"current={current_type}, target={target_type.lower()}"
-            )
-
-            if current_type.lower() == target_type.lower():
-                print("  -> Already migrated, skipping")
-                continue
-
-            null_sql = 'NULL' if nullable else 'NOT NULL'
-            sql = (
-                f"ALTER TABLE {table_name} "
-                f"MODIFY {column_name} {target_type} {null_sql}"
-            )
-
+        for i, sql in enumerate(migrations, 1):
+            print(f"[{i}/{len(migrations)}] Executing: {sql}")
             try:
                 conn.execute(text(sql))
                 conn.commit()
-                after_type = get_column_type(conn, table_name, column_name, db_name)
-                print(f"  -> Migrated successfully (now {after_type})")
+                print(f"  ✓ Success")
             except Exception as e:
-                print(f"  -> Error: {e}")
+                print(f"  ✗ Error: {e}")
                 if "doesn't exist" in str(e).lower():
-                    print("  -> Skipping (table/column doesn't exist)")
+                    print(f"  → Skipping (table/column doesn't exist)")
                     continue
                 else:
                     conn.rollback()
                     raise
     
-    print("\nMigration completed.")
+    print("\n✓ Migration completed successfully!")
     print("Your database now supports entries up to 4GB in size.")
 
 if __name__ == '__main__':
