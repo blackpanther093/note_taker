@@ -79,9 +79,11 @@ def create_app(config_name=None):
     app.register_blueprint(assets_bp, url_prefix='/api/assets')
     app.register_blueprint(shares_bp, url_prefix='/api/shares')
 
-    # Create tables on first request if needed
-    with app.app_context():
-        from app import models  # noqa: F401
-        db.create_all()
+    # Create tables automatically only in development
+    # In production, run init_db.py once via shell or temporary startup script
+    if app.config.get('DEBUG', False):
+        with app.app_context():
+            from app import models  # noqa: F401
+            db.create_all()
 
     return app
