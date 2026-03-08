@@ -59,7 +59,10 @@ class EntryAsset(db.Model):
     id = db.Column(db.String(36), primary_key=True, default=generate_uuid)
     entry_id = db.Column(db.String(36), db.ForeignKey('journal_entries.id', ondelete='CASCADE'), nullable=False)
     user_id = db.Column(db.String(36), db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
-    encrypted_data = db.Column(db.LargeBinary, nullable=False)  # LONGBLOB
+    encrypted_data = db.Column(
+        db.LargeBinary().with_variant(LONGBLOB, 'mysql'),
+        nullable=False
+    )
     iv = db.Column(db.LargeBinary(12), nullable=False)
     asset_type = db.Column(db.String(50), nullable=False)
     file_size = db.Column(db.Integer, nullable=False)

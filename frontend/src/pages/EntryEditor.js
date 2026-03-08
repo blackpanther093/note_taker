@@ -647,6 +647,12 @@ export default function EntryEditor() {
       }
 
       try {
+        // CRITICAL: Save entry first if it's new or has unsaved changes
+        // Backend requires entry to exist in database before accepting assets
+        if (isNew || hasUnsavedChanges) {
+          await handleSave();
+        }
+
         const arrayBuffer = await file.arrayBuffer();
         const fileBytes = new Uint8Array(arrayBuffer);
         const assetId = generateUUID();
@@ -676,7 +682,7 @@ export default function EntryEditor() {
         reader.readAsDataURL(file);
       } catch (err) {
         console.error('Failed to upload image:', err);
-        alert('Failed to upload image');
+        alert('Failed to upload image: ' + (err.response?.data?.error || err.message));
       }
     };
     input.click();

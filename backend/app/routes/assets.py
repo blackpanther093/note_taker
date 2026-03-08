@@ -82,7 +82,13 @@ def upload_asset(user_id):
         file_size=file_size,
     )
     db.session.add(asset)
-    db.session.commit()
+    
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f'Failed to save asset: {str(e)}')
+        return jsonify({'error': 'Failed to save asset'}), 500
 
     return jsonify({
         'message': 'Asset uploaded',
