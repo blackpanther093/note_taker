@@ -34,12 +34,16 @@ def migrate():
         if 'users' in tables:
             if not has_column('users', 'is_active'):
                 print("  - Adding is_active column to users...")
-                db.engine.execute(text('ALTER TABLE users ADD COLUMN is_active BOOLEAN DEFAULT TRUE'))
+                with db.engine.connect() as connection:
+                    connection.execute(text('ALTER TABLE users ADD COLUMN is_active BOOLEAN DEFAULT TRUE'))
+                    connection.commit()
                 print("    ✓ is_active added")
 
             if not has_column('users', 'kicked_out_at'):
                 print("  - Adding kicked_out_at column to users...")
-                db.engine.execute(text('ALTER TABLE users ADD COLUMN kicked_out_at DATETIME NULL'))
+                with db.engine.connect() as connection:
+                    connection.execute(text('ALTER TABLE users ADD COLUMN kicked_out_at DATETIME NULL'))
+                    connection.commit()
                 print("    ✓ kicked_out_at added")
 
         # 2. Create admins table if not present
