@@ -126,6 +126,7 @@ export default function EntryEditor() {
   const hydrationRef = useRef(true);
   const dirtyCheckDebounceRef = useRef(null);
   const lastAutoSaveTimeRef = useRef(0);
+  const hasLoadedEntryRef = useRef(false);
 
   const editor = useEditor({
     extensions: [
@@ -276,7 +277,8 @@ export default function EntryEditor() {
   }, [id, isNew, encryptionKey, editor, navigate, buildSnapshot, defaultBgColor]);
 
   useEffect(() => {
-    if (editor && !isNew) {
+    if (editor && !isNew && !hasLoadedEntryRef.current) {
+      hasLoadedEntryRef.current = true;
       loadEntry();
     }
   }, [editor, isNew, loadEntry]);
