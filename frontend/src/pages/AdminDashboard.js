@@ -75,6 +75,9 @@ export default function AdminDashboard() {
     );
   }
 
+  const storageUsedMb = Number(stats?.storage_used_mb ?? 0);
+  const storageUsedLabel = Number.isFinite(storageUsedMb) ? storageUsedMb.toFixed(2) : '0.00';
+
   return (
     <div className="admin-wrapper">
       <div className="admin-dashboard">
@@ -118,7 +121,7 @@ export default function AdminDashboard() {
             </div>
             <div className="stat-content">
               <p className="stat-label">Storage Used</p>
-              <p className="stat-value">{stats?.storage_used_mb?.toFixed(2) || 0} MB</p>
+              <p className="stat-value">{storageUsedLabel} MB</p>
             </div>
           </div>
 
