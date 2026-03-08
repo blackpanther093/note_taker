@@ -120,6 +120,7 @@ def get_current_user_id() -> str | None:
     session_id = session.get('session_id')
 
     if not user_id or not session_id:
+        current_app.logger.info('Auth miss: no user_id/session_id in cookie session')
         return None
 
     # Verify session is still valid in DB
@@ -129,14 +130,27 @@ def get_current_user_id() -> str | None:
     ).first()
 
     if not user_session:
+        current_app.logger.info('Auth miss: session row not found for session_id=%s', session_id)
         return None
 
     # Check expiration
-    if user_session.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+    now_utc = datetime.now(timezone.utc)
+    expires_at = user_session.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+    if expires_at < now_utc:
         db.session.delete(user_session)
         db.session.commit()
         session.clear()
+        current_app.logger.info('Auth miss: session expired for user_id=%s', user_id)
         return None
+
+    # Sliding expiration: keep active sessions alive.
+    lifetime = current_app.config.get('PERMANENT_SESSION_LIFETIME', timedelta(hours=1))
+    refreshed_expires_at = now_utc + lifetime
+    user_session.expires_at = refreshed_expires_at
+    db.session.commit()
 
     # Do not invalidate active sessions on IP/User-Agent drift.
     # In production behind proxies/mobile networks/device emulation,
