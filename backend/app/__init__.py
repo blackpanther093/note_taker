@@ -79,6 +79,14 @@ def create_app(config_name=None):
     app.register_blueprint(assets_bp, url_prefix='/api/assets')
     app.register_blueprint(shares_bp, url_prefix='/api/shares')
 
+    # API is consumed by SPA over CORS with credentialed sessions.
+    # Exempt JSON API blueprints from Flask-WTF CSRF form checks to avoid
+    # false 400s in cross-origin production deployments.
+    csrf.exempt(auth_bp)
+    csrf.exempt(entries_bp)
+    csrf.exempt(assets_bp)
+    csrf.exempt(shares_bp)
+
     # Create tables automatically only in development
     # In production, run init_db.py once via shell or temporary startup script
     if app.config.get('DEBUG', False):
