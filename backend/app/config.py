@@ -40,6 +40,11 @@ class Config:
         minutes=int(os.environ.get('SESSION_LIFETIME_MINUTES', 60))
     )
 
+    # Session binding controls. Strict IP/UA binding can cause false logouts
+    # on mobile networks, proxies, VPN changes, or browser device emulation.
+    SESSION_BIND_IP = os.environ.get('SESSION_BIND_IP', '0').lower() in ('1', 'true', 'yes')
+    SESSION_BIND_USER_AGENT = os.environ.get('SESSION_BIND_USER_AGENT', '0').lower() in ('1', 'true', 'yes')
+
     # Security
     WTF_CSRF_TIME_LIMIT = 3600
     MAX_LOGIN_ATTEMPTS = int(os.environ.get('MAX_LOGIN_ATTEMPTS', 5))
