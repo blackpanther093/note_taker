@@ -2,7 +2,7 @@
 import base64
 from datetime import datetime, date
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 
 from app import db, csrf
 from app.models import JournalEntry, DailyMetadata
@@ -228,9 +228,15 @@ def update_entry(user_id, entry_id):
         db.session.commit()
     except Exception as e:
         db.session.rollback()
-        import sys
-        print(f"Database error updating entry: {str(e)}", file=sys.stderr)
-        return jsonify({'error': 'Database error'}), 500
+        current_app.logger.exception('Database error updating entry')
+
+        err_text = str(e).lower()
+        if 'data too long' in err_text or 'out of range value' in err_text:
+            return jsonify({
+                'error': 'Entry data exceeds current database column size. Run backend/migrate_to_longblob.py in production shell, then retry.'
+            }), 413
+
+        return jsonify({'error': 'Database error while saving entry'}), 500
 
     return jsonify({
         'message': 'Entry updated',
