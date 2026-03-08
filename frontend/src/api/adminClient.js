@@ -21,7 +21,17 @@ adminClient.interceptors.request.use((config) => {
 adminClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const status = error.response?.status;
+    const requestUrl = String(error.config?.url || '');
+    const isLoginRequest = requestUrl.includes('/login');
+    const requires2FA = !!error.response?.data?.requires_2fa;
+
+    // Let AdminLogin handle expected 401 challenge responses.
+    if (status === 401 && isLoginRequest && requires2FA) {
+      return Promise.reject(error);
+    }
+
+    if (status === 401) {
       localStorage.removeItem('admin_session_token');
       localStorage.removeItem('admin_user');
       window.location.href = '/admin/login';
