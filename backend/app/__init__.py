@@ -1,5 +1,4 @@
 import os
-import logging
 from flask import Flask
 from flask_cors import CORS
 from flask_limiter import Limiter
@@ -38,15 +37,6 @@ def create_app(config_name=None):
     app.config.from_object(config_map.get(config_name, config_map['development']))
     app.config['RATELIMIT_STORAGE_URI'] = _resolve_rate_limit_storage(app.config.get('REDIS_URL'))
 
-    # Configure logging
-    if not app.debug:
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]'
-        )
-        app.logger.setLevel(logging.INFO)
-        app.logger.info('Journal API startup')
-
     # Initialize extensions
     db.init_app(app)
     csrf.init_app(app)
@@ -77,13 +67,6 @@ def create_app(config_name=None):
         )
         response.headers['Content-Security-Policy'] = csp
         return response
-
-    # Global error handler
-    @app.errorhandler(500)
-    def internal_error(error):
-        app.logger.error(f'Internal server error: {error}')
-        db.session.rollback()
-        return {'error': 'Internal server error'}, 500
 
     # Register blueprints
     from app.routes.auth import auth_bp

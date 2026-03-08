@@ -65,9 +65,18 @@ api.interceptors.response.use(
     }
     
     if (error.response?.status === 401) {
-      // Clear CSRF token on auth failures.
-      // Do not hard-redirect here; page-level handlers can preserve UI state.
+      // Clear CSRF token on logout
       csrfToken = null;
+      // Do not redirect on public routes (share links must work without auth)
+      const path = window.location.pathname;
+      const isPublicPath =
+        path.startsWith('/login') ||
+        path.startsWith('/register') ||
+        path.startsWith('/share/');
+
+      if (!isPublicPath) {
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }

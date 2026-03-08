@@ -2,7 +2,7 @@
 import base64
 from datetime import datetime, date
 
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify
 
 from app import db, csrf
 from app.models import JournalEntry, DailyMetadata
@@ -192,8 +192,6 @@ def update_entry(user_id, entry_id):
 
     Expects same JSON structure as create.
     """
-    MAX_CONTENT_SIZE = 10 * 1024 * 1024
-    
     entry = JournalEntry.query.filter_by(id=entry_id, user_id=user_id).first()
     if not entry:
         return jsonify({'error': 'Entry not found'}), 404
@@ -204,13 +202,7 @@ def update_entry(user_id, entry_id):
 
     try:
         if data.get('encrypted_content'):
-            encrypted_content = base64.b64decode(data['encrypted_content'])
-            # Validate content size
-            if len(encrypted_content) > MAX_CONTENT_SIZE:
-                return jsonify({
-                    'error': f'Entry too large. Maximum size is {MAX_CONTENT_SIZE // (1024*1024)}MB. Consider moving images to separate assets.'
-                }), 413
-            entry.encrypted_content = encrypted_content
+            entry.encrypted_content = base64.b64decode(data['encrypted_content'])
         if data.get('iv'):
             iv = base64.b64decode(data['iv'])
             if len(iv) != 12:
@@ -221,22 +213,10 @@ def update_entry(user_id, entry_id):
         if data.get('encrypted_metadata') and data.get('metadata_iv'):
             entry.encrypted_metadata = base64.b64decode(data['encrypted_metadata'])
             entry.metadata_iv = base64.b64decode(data['metadata_iv'])
-    except (ValueError, Exception) as e:
+    except (ValueError, Exception):
         return jsonify({'error': 'Invalid data encoding'}), 400
 
-    try:
-        db.session.commit()
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.exception('Database error updating entry')
-
-        err_text = str(e).lower()
-        if 'data too long' in err_text or 'out of range value' in err_text:
-            return jsonify({
-                'error': 'Entry data exceeds current database column size. Run backend/migrate_to_longblob.py in production shell, then retry.'
-            }), 413
-
-        return jsonify({'error': 'Database error while saving entry'}), 500
+    db.session.commit()
 
     return jsonify({
         'message': 'Entry updated',

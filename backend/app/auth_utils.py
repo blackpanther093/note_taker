@@ -120,7 +120,6 @@ def get_current_user_id() -> str | None:
     session_id = session.get('session_id')
 
     if not user_id or not session_id:
-        current_app.logger.info('Auth miss: no user_id/session_id in cookie session')
         return None
 
     # Verify session is still valid in DB
@@ -130,32 +129,34 @@ def get_current_user_id() -> str | None:
     ).first()
 
     if not user_session:
-        current_app.logger.info('Auth miss: session row not found for session_id=%s', session_id)
         return None
 
     # Check expiration
-    now_utc = datetime.now(timezone.utc)
-    expires_at = user_session.expires_at
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
-
-    if expires_at < now_utc:
+    if user_session.expires_at.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
         db.session.delete(user_session)
         db.session.commit()
         session.clear()
-        current_app.logger.info('Auth miss: session expired for user_id=%s', user_id)
         return None
 
-    # Sliding expiration: keep active sessions alive.
-    lifetime = current_app.config.get('PERMANENT_SESSION_LIFETIME', timedelta(hours=1))
-    refreshed_expires_at = now_utc + lifetime
-    user_session.expires_at = refreshed_expires_at
-    db.session.commit()
+    # Validate IP address (proxy-aware)
+    current_ip = _get_client_ip()
+    if user_session.ip_address != current_ip:
+        # IP mismatch - potential session hijacking
+        db.session.delete(user_session)
+        db.session.commit()
+        session.clear()
+        return None
 
-    # Do not invalidate active sessions on IP/User-Agent drift.
-    # In production behind proxies/mobile networks/device emulation,
-    # these values can change mid-session and cause false 401 logouts.
-    # Session validity is enforced by signed cookie + DB session row + expiry.
+    # Validate User-Agent hash
+    current_ua = request.headers.get('User-Agent', '')
+    if user_session.user_agent_hash:
+        current_ua_hash = _hash_user_agent(current_ua)
+        if user_session.user_agent_hash != current_ua_hash:
+            # User-Agent mismatch - potential session hijacking
+            db.session.delete(user_session)
+            db.session.commit()
+            session.clear()
+            return None
 
     return user_id
 
