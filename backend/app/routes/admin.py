@@ -14,6 +14,15 @@ from app.models import User, Admin, AdminSession, JournalEntry, EntryAsset, Shar
 admin_bp = Blueprint('admin', __name__, url_prefix='/api/admin')
 
 
+def _as_utc(dt):
+    """Normalize naive/aware datetimes to UTC-aware for safe comparison."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
 def admin_login_required(f):
     """Decorator to require admin login."""
 
@@ -24,7 +33,8 @@ def admin_login_required(f):
             return jsonify({'error': 'Admin authentication required'}), 401
 
         admin_session = AdminSession.query.filter_by(session_token=admin_sid).first()
-        if not admin_session or admin_session.expires_at < datetime.now(timezone.utc):
+        expires_at = _as_utc(admin_session.expires_at) if admin_session else None
+        if not admin_session or not expires_at or expires_at < datetime.now(timezone.utc):
             return jsonify({'error': 'Admin session invalid or expired'}), 401
 
         admin = admin_session.admin
@@ -205,9 +215,10 @@ def get_user_details(admin_id, user_id):
             'entries_list': [
                 {
                     'id': e.id,
-                    'title': e.title,
+                    # Title/body are encrypted client-side and unavailable to admin backend.
+                    'title': 'Encrypted entry',
                     'created_at': e.created_at.isoformat(),
-                    'word_count': len(e.body.split()) if e.body else 0,
+                    'word_count': 0,
                 }
                 for e in entries[:10]  # Last 10 entries
             ],
