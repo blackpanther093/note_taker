@@ -463,7 +463,6 @@ export default function EntryEditor() {
     entryDate,
     isNew,
     buildSnapshot,
-    upsertShareInfo,
   ]);
 
   const handleDownload = async () => {
@@ -773,7 +772,8 @@ export default function EntryEditor() {
       void uploadEditorImage(file);
     };
 
-    const dom = editor.view.dom;
+    const dom = editor?.view?.dom;
+    if (!dom) return undefined;
     dom.addEventListener('paste', handlePasteImage);
     return () => {
       dom.removeEventListener('paste', handlePasteImage);

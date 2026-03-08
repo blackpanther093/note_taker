@@ -1,11 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { adminAPI } from '../api/adminClient';
-import { ChevronLeft, Search, MoreVertical, Trash2, RotateCcw, Eye } from 'lucide-react';
+import { ChevronLeft, Search, Trash2, RotateCcw, Eye } from 'lucide-react';
 import './AdminUsers.css';
 
 export default function AdminUsers() {
-  const [admin, setAdmin] = useState(null);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -24,7 +23,6 @@ export default function AdminUsers() {
         navigate('/admin/login');
         return;
       }
-      setAdmin(JSON.parse(adminData));
       fetchUsers(1);
     };
     checkAdminAuth();
@@ -118,6 +116,12 @@ export default function AdminUsers() {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
+
+        {error && (
+          <div className="users-error" role="alert">
+            {error}
+          </div>
+        )}
 
         {/* Users Table */}
         <div className="users-table-container">

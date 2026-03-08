@@ -63,11 +63,15 @@ export default function ShareView() {
             );
             setMetadata(JSON.parse(decryptedMeta));
           } catch (metaErr) {
-            console.error('Metadata decryption failed:', metaErr);
+            if (process.env.NODE_ENV === 'development') {
+              console.warn('Metadata decryption failed:', metaErr);
+            }
           }
         }
       } catch (err) {
-        console.error('Failed to load shared entry:', err);
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Failed to load shared entry:', err);
+        }
         setError(err.response?.data?.error || 'Failed to load shared entry');
       } finally {
         setLoading(false);

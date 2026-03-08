@@ -55,6 +55,7 @@ Run these in backend shell after deploy:
 cd backend
 python init_tables.py
 python migrate_to_longblob.py
+python migrate_add_admin.py
 python migrate_add_share_vault.py
 ```
 

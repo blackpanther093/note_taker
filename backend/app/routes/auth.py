@@ -428,7 +428,6 @@ def upsert_share_vault(user_id):
         # If table doesn't exist, try to create it
         if 'user_share_vaults' in str(e):
             try:
-                from app.models import UserShareVault
                 UserShareVault.__table__.create(db.engine, checkfirst=True)
                 # Retry the insert
                 vault = UserShareVault(user_id=user_id, encrypted_vault=encrypted_vault, iv=iv)

@@ -48,7 +48,9 @@ export function AuthProvider({ children }) {
       merged = mergeShareVaults(localVault, remoteVault);
     } catch (err) {
       // Remote vault may not exist yet; keep local data.
-      console.warn('Share vault fetch failed, using local vault:', err);
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Share vault fetch failed, using local vault:', err);
+      }
     }
 
     writeLocalShareVault(merged);
@@ -57,7 +59,9 @@ export function AuthProvider({ children }) {
     try {
       await pushRemoteShareVault(merged, encKey);
     } catch (err) {
-      console.warn('Share vault push failed:', err);
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Share vault push failed:', err);
+      }
     }
   }, []);
 
@@ -68,9 +72,18 @@ export function AuthProvider({ children }) {
     initRef.current = true;
 
     const initializeAuth = async () => {
+      const storedKey = sessionStorage.getItem(ENC_KEY_STORAGE);
+      // No tab-scoped encryption key means no restorable authenticated state.
+      // Skip /auth/me to avoid expected 401s on public pages.
+      if (!storedKey) {
+        setUser(null);
+        setEncryptionKey(null);
+        setLoading(false);
+        return;
+      }
+
       try {
         const res = await authAPI.me();
-        const storedKey = sessionStorage.getItem(ENC_KEY_STORAGE);
         if (storedKey) {
           setUser(res.data.user);
           setEncryptionKey(base64ToArray(storedKey));
@@ -144,7 +157,9 @@ export function AuthProvider({ children }) {
       try {
         await pushRemoteShareVault(next, encryptionKey);
       } catch (err) {
-        console.warn('Share vault update push failed:', err);
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('Share vault update push failed:', err);
+        }
       }
     }
 
@@ -241,7 +256,9 @@ export function AuthProvider({ children }) {
       const vault = readLocalShareVault();
       await pushRemoteShareVault(vault, newEncKey);
     } catch (vaultErr) {
-      console.warn('Failed to re-encrypt share vault after password change:', vaultErr);
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Failed to re-encrypt share vault after password change:', vaultErr);
+      }
     }
 
     return response.data;

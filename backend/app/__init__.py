@@ -7,6 +7,7 @@ from flask_limiter.util import get_remote_address
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf.csrf import CSRFProtect
 import redis
+from sqlalchemy import inspect, text
 
 db = SQLAlchemy()
 csrf = CSRFProtect()
@@ -14,6 +15,48 @@ limiter = Limiter(
     key_func=get_remote_address,
     default_limits=["200 per minute"],
 )
+
+
+def _ensure_critical_schema(app: Flask) -> None:
+    """Best-effort schema bootstrap for production safety.
+
+    Keeps app startup resilient when one-time migrations were missed.
+    """
+    with app.app_context():
+        try:
+            if db.engine.dialect.name != 'mysql':
+                return
+
+            inspector = inspect(db.engine)
+            tables = set(inspector.get_table_names())
+
+            if 'users' in tables:
+                user_cols = {col['name'] for col in inspector.get_columns('users')}
+                with db.engine.begin() as connection:
+                    if 'is_active' not in user_cols:
+                        app.logger.warning('Schema sync: adding users.is_active')
+                        connection.execute(text('ALTER TABLE users ADD COLUMN is_active BOOLEAN DEFAULT TRUE'))
+                    if 'kicked_out_at' not in user_cols:
+                        app.logger.warning('Schema sync: adding users.kicked_out_at')
+                        connection.execute(text('ALTER TABLE users ADD COLUMN kicked_out_at DATETIME NULL'))
+
+            # Ensure critical tables used by current API routes exist.
+            from app.models import Admin, AdminSession, UserShareVault
+
+            if 'admins' not in tables:
+                app.logger.warning('Schema sync: creating admins table')
+                Admin.__table__.create(db.engine, checkfirst=True)
+
+            if 'admin_sessions' not in tables:
+                app.logger.warning('Schema sync: creating admin_sessions table')
+                AdminSession.__table__.create(db.engine, checkfirst=True)
+
+            if 'user_share_vaults' not in tables:
+                app.logger.warning('Schema sync: creating user_share_vaults table')
+                UserShareVault.__table__.create(db.engine, checkfirst=True)
+        except Exception as exc:
+            # Non-fatal: startup should continue even if bootstrap cannot run.
+            app.logger.error('Schema sync skipped due to error: %s', exc)
 
 
 def _resolve_rate_limit_storage(redis_url: str) -> str:
@@ -112,5 +155,7 @@ def create_app(config_name=None):
         with app.app_context():
             from app import models  # noqa: F401
             db.create_all()
+    else:
+        _ensure_critical_schema(app)
 
     return app
