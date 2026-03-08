@@ -59,6 +59,12 @@
   font-size: 0.9rem;
 }
 
+.admin-login-form .form-group input#totp {
+  letter-spacing: 0.3rem;
+  text-align: center;
+  font-weight: 700;
+}
+
 .admin-login-form {
   display: flex;
   flex-direction: column;

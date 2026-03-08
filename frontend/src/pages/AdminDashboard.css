@@ -172,6 +172,28 @@
   box-shadow: 0 8px 16px rgba(102, 126, 234, 0.3);
 }
 
+.action-btn.secondary {
+  background: #f1f3f5;
+  color: #212529;
+}
+
+.action-btn.secondary:hover {
+  box-shadow: none;
+  background: #e9ecef;
+}
+
+.twofa-enabled-note {
+  margin: 0.75rem 0 0;
+  color: #1f7a3f;
+  font-weight: 600;
+}
+
+.twofa-error-note {
+  margin: 0.75rem 0 0;
+  color: #c62828;
+  font-weight: 600;
+}
+
 /* Info Section */
 .admin-info {
   display: grid;
@@ -253,6 +275,79 @@
 .admin-error svg {
   color: #dc3545;
   margin-bottom: 1rem;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.modal-content {
+  background: #fff;
+  width: 100%;
+  max-width: 440px;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.modal-close {
+  background: transparent;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+
+.modal-body {
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.twofa-qr {
+  width: 200px;
+  height: 200px;
+  align-self: center;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+}
+
+.twofa-secret {
+  background: #f8f9fa;
+  border: 1px dashed #adb5bd;
+  padding: 0.5rem;
+  border-radius: 6px;
+  text-align: center;
+}
+
+.twofa-code-input {
+  width: 100%;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  padding: 0.75rem;
+  font-size: 1rem;
+  text-align: center;
+  letter-spacing: 0.28rem;
+  font-weight: 700;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 0.75rem;
 }
 
 /* Responsive */

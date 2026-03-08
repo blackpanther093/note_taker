@@ -7,6 +7,8 @@ import './AdminLogin.css';
 export default function AdminLogin() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [totpCode, setTotpCode] = useState('');
+  const [requires2FA, setRequires2FA] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -18,18 +20,26 @@ export default function AdminLogin() {
     setLoading(true);
 
     try {
-      const response = await adminAPI.login(username, password);
-      const { session_token, admin_id, username: adminUsername } = response.data;
+      const response = await adminAPI.login(username, password, totpCode);
+      const { session_token, admin_id, username: adminUsername, totp_enabled } = response.data;
 
       // Store admin credentials
       localStorage.setItem('admin_session_token', session_token);
       localStorage.setItem('admin_user', JSON.stringify({
         id: admin_id,
         username: adminUsername,
+        totp_enabled: !!totp_enabled,
       }));
 
       navigate('/admin/dashboard');
     } catch (err) {
+      if (err.response?.status === 401 && err.response?.data?.requires_2fa) {
+        setRequires2FA(true);
+        setError('Enter your 2FA code from authenticator app.');
+        setLoading(false);
+        return;
+      }
+
       const apiError = err.response?.data?.error || 'Login failed';
       if (err.response?.status === 400 && typeof apiError === 'string' && apiError.toLowerCase().includes('csrf')) {
         setError('Admin login blocked by security policy. Redeploy backend with admin API CSRF exemption.');
@@ -98,8 +108,26 @@ export default function AdminLogin() {
             </div>
           </div>
 
+          {requires2FA && (
+            <div className="form-group">
+              <label htmlFor="totp">2FA Code</label>
+              <input
+                id="totp"
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                value={totpCode}
+                onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="Enter 6-digit code"
+                disabled={loading}
+                autoComplete="one-time-code"
+                required
+              />
+            </div>
+          )}
+
           <button type="submit" disabled={loading} className="admin-login-btn">
-            {loading ? 'Logging in...' : 'Login'}
+            {loading ? 'Logging in...' : (requires2FA ? 'Verify & Login' : 'Login')}
           </button>
         </form>
 

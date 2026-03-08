@@ -51,6 +51,20 @@ def migrate():
             print("  - Creating admins table...")
             Admin.__table__.create(db.engine, checkfirst=True)
             print("    ✓ admins table created")
+        else:
+            if not has_column('admins', 'totp_secret'):
+                print("  - Adding totp_secret column to admins...")
+                with db.engine.connect() as connection:
+                    connection.execute(text('ALTER TABLE admins ADD COLUMN totp_secret VARCHAR(255) NULL'))
+                    connection.commit()
+                print("    ✓ totp_secret added")
+
+            if not has_column('admins', 'totp_enabled'):
+                print("  - Adding totp_enabled column to admins...")
+                with db.engine.connect() as connection:
+                    connection.execute(text('ALTER TABLE admins ADD COLUMN totp_enabled BOOLEAN DEFAULT FALSE'))
+                    connection.commit()
+                print("    ✓ totp_enabled added")
 
         # 3. Create admin_sessions table if not present
         if 'admin_sessions' not in tables:

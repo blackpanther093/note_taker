@@ -2,11 +2,14 @@
 import base64
 import os
 import secrets
+import io
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 
 from flask import Blueprint, request, jsonify, session, current_app
 from sqlalchemy import func, desc
+import pyotp
+import qrcode
 
 from app import db
 from app.models import User, Admin, AdminSession, JournalEntry, EntryAsset, SharedEntry
@@ -52,6 +55,7 @@ def admin_login():
 
     username = data.get('username', '').strip()
     password = data.get('password', '')
+    totp_code = data.get('totp_code', '').strip()
 
     if not username or not password:
         return jsonify({'error': 'Username and password required'}), 400
@@ -67,6 +71,16 @@ def admin_login():
             return jsonify({'error': 'Invalid credentials'}), 401
     except Exception:
         return jsonify({'error': 'Invalid credentials'}), 401
+
+    if admin.totp_enabled:
+        if not totp_code:
+            return jsonify({'error': '2FA code required', 'requires_2fa': True}), 401
+        try:
+            totp = pyotp.TOTP(admin.totp_secret)
+            if not totp.verify(totp_code, valid_window=1):
+                return jsonify({'error': 'Invalid 2FA code', 'requires_2fa': True}), 401
+        except Exception:
+            return jsonify({'error': 'Invalid 2FA setup'}), 400
 
     # Create session
     session_token = secrets.token_urlsafe(32)
@@ -88,7 +102,61 @@ def admin_login():
         'session_token': session_token,
         'admin_id': admin.id,
         'username': admin.username,
+        'totp_enabled': bool(admin.totp_enabled),
     }), 200
+
+
+@admin_bp.route('/setup-2fa', methods=['POST'])
+@admin_login_required
+def setup_admin_2fa(admin_id):
+    """Generate TOTP secret and QR code for admin 2FA setup."""
+    admin = Admin.query.get(admin_id)
+    if not admin:
+        return jsonify({'error': 'Admin not found'}), 404
+
+    if admin.totp_enabled and admin.totp_secret:
+        return jsonify({'error': '2FA already enabled'}), 400
+
+    secret = pyotp.random_base32()
+    admin.totp_secret = secret
+    admin.totp_enabled = False
+    db.session.commit()
+
+    issuer = 'My Journal Admin'
+    account = admin.email or admin.username
+    provisioning_uri = pyotp.TOTP(secret).provisioning_uri(name=account, issuer_name=issuer)
+
+    qr = qrcode.make(provisioning_uri)
+    buffer = io.BytesIO()
+    qr.save(buffer, format='PNG')
+    qr_b64 = base64.b64encode(buffer.getvalue()).decode()
+
+    return jsonify({
+        'secret': secret,
+        'qr_code': f'data:image/png;base64,{qr_b64}',
+    }), 200
+
+
+@admin_bp.route('/verify-2fa', methods=['POST'])
+@admin_login_required
+def verify_admin_2fa(admin_id):
+    """Verify admin TOTP code and enable 2FA."""
+    data = request.get_json(silent=True)
+    if not data or not data.get('totp_code'):
+        return jsonify({'error': 'TOTP code required'}), 400
+
+    admin = Admin.query.get(admin_id)
+    if not admin or not admin.totp_secret:
+        return jsonify({'error': 'Setup 2FA first'}), 400
+
+    totp = pyotp.TOTP(admin.totp_secret)
+    if not totp.verify(data['totp_code'], valid_window=1):
+        return jsonify({'error': 'Invalid code'}), 400
+
+    admin.totp_enabled = True
+    db.session.commit()
+
+    return jsonify({'message': 'Admin 2FA enabled successfully'}), 200
 
 
 @admin_bp.route('/logout', methods=['POST'])
@@ -104,6 +172,24 @@ def admin_logout(admin_id):
 
     session.pop('admin_sid', None)
     return jsonify({'message': 'Admin logout successful'}), 200
+
+
+@admin_bp.route('/me', methods=['GET'])
+@admin_login_required
+def admin_me(admin_id):
+    """Get current admin profile for dashboard/session restore."""
+    admin = Admin.query.get(admin_id)
+    if not admin:
+        return jsonify({'error': 'Admin not found'}), 404
+
+    return jsonify({
+        'admin': {
+            'id': admin.id,
+            'username': admin.username,
+            'email': admin.email,
+            'totp_enabled': bool(admin.totp_enabled),
+        }
+    }), 200
 
 
 @admin_bp.route('/dashboard', methods=['GET'])

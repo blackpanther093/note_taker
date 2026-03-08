@@ -9,6 +9,12 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [show2FAModal, setShow2FAModal] = useState(false);
+  const [twoFASecret, setTwoFASecret] = useState('');
+  const [twoFAQr, setTwoFAQr] = useState('');
+  const [twoFACode, setTwoFACode] = useState('');
+  const [twoFAError, setTwoFAError] = useState('');
+  const [twoFALoading, setTwoFALoading] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -20,6 +26,13 @@ export default function AdminDashboard() {
           return;
         }
         setAdmin(JSON.parse(adminData));
+
+        try {
+          const meRes = await adminAPI.me();
+          setAdmin(meRes.data.admin);
+        } catch {
+          // Ignore and keep local cache fallback.
+        }
 
         // Fetch dashboard stats
         const response = await adminAPI.getDashboard();
@@ -45,6 +58,45 @@ export default function AdminDashboard() {
       localStorage.removeItem('admin_session_token');
       localStorage.removeItem('admin_user');
       navigate('/admin/login');
+    }
+  };
+
+  const handleStart2FASetup = async () => {
+    setTwoFAError('');
+    setTwoFALoading(true);
+    try {
+      const res = await adminAPI.setup2FA();
+      setTwoFASecret(res.data.secret);
+      setTwoFAQr(res.data.qr_code);
+      setTwoFACode('');
+      setShow2FAModal(true);
+    } catch (err) {
+      setTwoFAError(err.response?.data?.error || 'Failed to start 2FA setup');
+    } finally {
+      setTwoFALoading(false);
+    }
+  };
+
+  const handleVerify2FA = async () => {
+    if (twoFACode.length !== 6) {
+      setTwoFAError('Enter a valid 6-digit code');
+      return;
+    }
+    setTwoFAError('');
+    setTwoFALoading(true);
+    try {
+      await adminAPI.verify2FA(twoFACode);
+      const nextAdmin = { ...(admin || {}), totp_enabled: true };
+      setAdmin(nextAdmin);
+      localStorage.setItem('admin_user', JSON.stringify(nextAdmin));
+      setShow2FAModal(false);
+      setTwoFASecret('');
+      setTwoFAQr('');
+      setTwoFACode('');
+    } catch (err) {
+      setTwoFAError(err.response?.data?.error || 'Failed to verify 2FA code');
+    } finally {
+      setTwoFALoading(false);
     }
   };
 
@@ -156,6 +208,18 @@ export default function AdminDashboard() {
             <Users size={16} />
             Manage Users
           </button>
+          {!admin?.totp_enabled && (
+            <button
+              className="action-btn secondary"
+              onClick={handleStart2FASetup}
+              disabled={twoFALoading}
+            >
+              <AlertCircle size={16} />
+              {twoFALoading ? 'Starting 2FA...' : 'Enable Admin 2FA'}
+            </button>
+          )}
+          {admin?.totp_enabled && <p className="twofa-enabled-note">Admin 2FA is enabled.</p>}
+          {twoFAError && !show2FAModal && <p className="twofa-error-note">{twoFAError}</p>}
         </section>
 
         {/* Info Box */}
@@ -180,6 +244,40 @@ export default function AdminDashboard() {
           </div>
         </section>
       </div>
+
+      {show2FAModal && (
+        <div className="modal-overlay" onClick={() => setShow2FAModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Enable Admin 2FA</h2>
+              <button className="modal-close" onClick={() => setShow2FAModal(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p>Scan this QR with Google Authenticator/Authy, then verify with a 6-digit code.</p>
+              {twoFAQr && <img src={twoFAQr} alt="Admin 2FA QR" className="twofa-qr" />}
+              <code className="twofa-secret">{twoFASecret}</code>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                value={twoFACode}
+                onChange={(e) => setTwoFACode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="Enter 6-digit code"
+                className="twofa-code-input"
+              />
+              {twoFAError && <p className="twofa-error-note">{twoFAError}</p>}
+              <div className="modal-actions">
+                <button className="action-btn" onClick={handleVerify2FA} disabled={twoFALoading}>
+                  {twoFALoading ? 'Verifying...' : 'Verify & Enable'}
+                </button>
+                <button className="action-btn secondary" onClick={() => setShow2FAModal(false)}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

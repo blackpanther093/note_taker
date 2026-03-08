@@ -150,18 +150,18 @@ export default function AdminUsers() {
                 <tbody>
                   {filteredUsers.map(user => (
                     <tr key={user.id} className={!user.is_active ? 'is-inactive' : ''}>
-                      <td className="email-cell">
+                      <td className="email-cell" data-label="Email">
                         <strong>{user.email}</strong>
                       </td>
-                      <td className="center">{user.entries}</td>
-                      <td className="center">{user.storage_mb} MB</td>
-                      <td className="center">
+                      <td className="center" data-label="Entries">{user.entries}</td>
+                      <td className="center" data-label="Storage">{user.storage_mb} MB</td>
+                      <td className="center" data-label="Status">
                         <span className={`status-badge ${user.is_active ? 'active' : 'inactive'}`}>
                           {user.is_active ? '✓ Active' : '✗ Kicked'}
                         </span>
                       </td>
-                      <td className="center">{new Date(user.created_at).toLocaleDateString()}</td>
-                      <td className="actions-cell">
+                      <td className="center" data-label="Joined">{new Date(user.created_at).toLocaleDateString()}</td>
+                      <td className="actions-cell" data-label="Actions">
                         <button
                           className="action-icon-btn"
                           onClick={() => loadUserDetails(user.id)}

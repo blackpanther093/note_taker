@@ -214,6 +214,8 @@ class Admin(db.Model):
     username = db.Column(db.String(255), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
     email = db.Column(db.String(255), nullable=True)
+    totp_secret = db.Column(db.String(255), nullable=True)
+    totp_enabled = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(
         db.DateTime,

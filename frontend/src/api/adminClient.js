@@ -31,12 +31,18 @@ adminClient.interceptors.response.use(
 );
 
 export const adminAPI = {
-  login: (username, password) =>
-    adminClient.post('/login', { username, password }),
+  login: (username, password, totpCode = '') =>
+    adminClient.post('/login', { username, password, totp_code: totpCode }),
   logout: () =>
     adminClient.post('/logout'),
+  me: () =>
+    adminClient.get('/me'),
   getDashboard: () =>
     adminClient.get('/dashboard'),
+  setup2FA: () =>
+    adminClient.post('/setup-2fa'),
+  verify2FA: (totpCode) =>
+    adminClient.post('/verify-2fa', { totp_code: totpCode }),
   getUsers: (page = 1, perPage = 20) =>
     adminClient.get('/users', { params: { page, per_page: perPage } }),
   getUserDetails: (userId) =>

@@ -46,6 +46,15 @@ def _ensure_critical_schema(app: Flask) -> None:
             if 'admins' not in tables:
                 app.logger.warning('Schema sync: creating admins table')
                 Admin.__table__.create(db.engine, checkfirst=True)
+            else:
+                admin_cols = {col['name'] for col in inspector.get_columns('admins')}
+                with db.engine.begin() as connection:
+                    if 'totp_secret' not in admin_cols:
+                        app.logger.warning('Schema sync: adding admins.totp_secret')
+                        connection.execute(text('ALTER TABLE admins ADD COLUMN totp_secret VARCHAR(255) NULL'))
+                    if 'totp_enabled' not in admin_cols:
+                        app.logger.warning('Schema sync: adding admins.totp_enabled')
+                        connection.execute(text('ALTER TABLE admins ADD COLUMN totp_enabled BOOLEAN DEFAULT FALSE'))
 
             if 'admin_sessions' not in tables:
                 app.logger.warning('Schema sync: creating admin_sessions table')
