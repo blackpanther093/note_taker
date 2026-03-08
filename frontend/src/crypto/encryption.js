@@ -311,6 +311,38 @@ export async function decryptWithShareKey(encryptedContentHex, ivHex, shareKey) 
 }
 
 /**
+ * Derive vault key from user encryption key.
+ * Vault key never leaves browser.
+ */
+export async function deriveShareVaultKey(encryptionKey) {
+  return deriveSubKey(encryptionKey, 'my-journal-share-vault-v1');
+}
+
+/**
+ * Encrypt share vault object for server storage.
+ */
+export async function encryptShareVault(vault, encryptionKey) {
+  const vaultKey = await deriveShareVaultKey(encryptionKey);
+  const plaintext = new TextEncoder().encode(JSON.stringify(vault));
+  const { ciphertext, iv } = await encrypt(plaintext, vaultKey);
+  return {
+    encrypted_vault: arrayToBase64(ciphertext),
+    iv: arrayToBase64(iv),
+  };
+}
+
+/**
+ * Decrypt share vault object fetched from server.
+ */
+export async function decryptShareVault(encryptedVaultB64, ivB64, encryptionKey) {
+  const vaultKey = await deriveShareVaultKey(encryptionKey);
+  const ciphertext = base64ToArray(encryptedVaultB64);
+  const iv = base64ToArray(ivB64);
+  const plaintext = await decrypt(ciphertext, iv, vaultKey);
+  return JSON.parse(new TextDecoder().decode(plaintext));
+}
+
+/**
  * Convert hex string to Uint8Array
  * @param {string} hex - Hex string
  * @returns {Uint8Array}

@@ -1,5 +1,17 @@
 # Getting Started with Create React App
 
+## Project Notes
+
+This frontend is part of **My Journal** (zero-knowledge encrypted journaling).
+
+- Entry/share encryption and decryption happen client-side.
+- Supports encrypted image uploads and clipboard image paste.
+- Uses authenticated API with cookie sessions and CSRF token handling.
+- Share links are read-only and decrypted client-side from URL fragment key.
+
+For production deployment, schema migrations, and architecture details,
+see root documentation: `../README.md`.
+
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
 ## Available Scripts

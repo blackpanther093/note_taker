@@ -112,6 +112,15 @@ export const authAPI = {
       new_salt: newSalt,
       reencrypted_entries: reencryptedEntries,
     }),
+
+  getShareVault: () =>
+    api.get('/auth/share-vault'),
+
+  upsertShareVault: (encryptedVault, iv) =>
+    api.put('/auth/share-vault', {
+      encrypted_vault: encryptedVault,
+      iv,
+    }),
 };
 
 // --- Entries API ---

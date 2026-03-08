@@ -15,7 +15,7 @@ import sib_api_v3_sdk
 from sib_api_v3_sdk.rest import ApiException
 
 from app import db, limiter, csrf
-from app.models import User, SignupOTP
+from app.models import User, SignupOTP, UserShareVault
 from app.auth_utils import (
     hash_auth_key,
     verify_auth_key,
@@ -347,6 +347,67 @@ def me(user_id):
             'created_at': user.created_at.isoformat() if user.created_at else None,
         }
     })
+
+
+@auth_bp.route('/share-vault', methods=['GET'])
+@login_required
+def get_share_vault(user_id):
+    """Fetch encrypted share key vault for the logged in user.
+
+    The server stores only opaque ciphertext + IV.
+    Decryption always happens client-side with a key derived from user's password.
+    """
+    vault = UserShareVault.query.filter_by(user_id=user_id).first()
+    if not vault:
+        return jsonify({'exists': False}), 200
+
+    return jsonify({
+        'exists': True,
+        'encrypted_vault': base64.b64encode(vault.encrypted_vault).decode(),
+        'iv': base64.b64encode(vault.iv).decode(),
+        'updated_at': vault.updated_at.isoformat() if vault.updated_at else None,
+    }), 200
+
+
+@auth_bp.route('/share-vault', methods=['PUT'])
+@login_required
+def upsert_share_vault(user_id):
+    """Upsert encrypted share key vault payload.
+
+    Expects JSON:
+    {
+        "encrypted_vault": "<base64 ciphertext>",
+        "iv": "<base64 12-byte IV>"
+    }
+    """
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({'error': 'Invalid request'}), 400
+
+    encrypted_vault_b64 = data.get('encrypted_vault', '')
+    iv_b64 = data.get('iv', '')
+    if not encrypted_vault_b64 or not iv_b64:
+        return jsonify({'error': 'Missing required fields'}), 400
+
+    try:
+        encrypted_vault = base64.b64decode(encrypted_vault_b64)
+        iv = base64.b64decode(iv_b64)
+    except Exception:
+        return jsonify({'error': 'Invalid vault encoding'}), 400
+
+    if len(iv) != 12:
+        return jsonify({'error': 'IV must be 12 bytes'}), 400
+
+    vault = UserShareVault.query.filter_by(user_id=user_id).first()
+    if not vault:
+        vault = UserShareVault(user_id=user_id, encrypted_vault=encrypted_vault, iv=iv)
+        db.session.add(vault)
+    else:
+        vault.encrypted_vault = encrypted_vault
+        vault.iv = iv
+
+    db.session.commit()
+    return jsonify({'message': 'Share vault updated'}), 200
 
 
 @auth_bp.route('/setup-2fa', methods=['POST'])

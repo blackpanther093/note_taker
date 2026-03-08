@@ -16,6 +16,14 @@ import {
   arrayToBase64,
   base64ToArray,
 } from '../crypto/encryption';
+import {
+  readLocalShareVault,
+  writeLocalShareVault,
+  mergeShareVaults,
+  fetchRemoteShareVault,
+  pushRemoteShareVault,
+  getShareVaultEntry,
+} from '../utils/shareVault';
 
 const AuthContext = createContext(null);
 
@@ -25,8 +33,33 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [encryptionKey, setEncryptionKey] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [shareVault, setShareVault] = useState(() => readLocalShareVault());
   const initRef = React.useRef(false);
   const loggingOutRef = React.useRef(false);
+
+  const syncShareVault = useCallback(async (encKey) => {
+    if (!encKey) return;
+
+    const localVault = readLocalShareVault();
+    let merged = localVault;
+
+    try {
+      const remoteVault = await fetchRemoteShareVault(encKey);
+      merged = mergeShareVaults(localVault, remoteVault);
+    } catch (err) {
+      // Remote vault may not exist yet; keep local data.
+      console.warn('Share vault fetch failed, using local vault:', err);
+    }
+
+    writeLocalShareVault(merged);
+    setShareVault(merged);
+
+    try {
+      await pushRemoteShareVault(merged, encKey);
+    } catch (err) {
+      console.warn('Share vault push failed:', err);
+    }
+  }, []);
 
   // Check if session is still valid on mount and restore encryption key
   useEffect(() => {
@@ -77,6 +110,47 @@ export function AuthProvider({ children }) {
     sessionStorage.setItem(ENC_KEY_STORAGE, arrayToBase64(key));
   }, []);
 
+  useEffect(() => {
+    if (!user || !encryptionKey) return;
+    syncShareVault(encryptionKey);
+  }, [user, encryptionKey, syncShareVault]);
+
+  const getShareInfo = useCallback((entryId) => {
+    return getShareVaultEntry(shareVault, entryId);
+  }, [shareVault]);
+
+  const upsertShareInfo = useCallback(async (entryId, patch) => {
+    if (!entryId) return null;
+
+    const current = readLocalShareVault();
+    const now = Date.now();
+    const next = {
+      ...current,
+      updatedAt: now,
+      entries: {
+        ...current.entries,
+        [entryId]: {
+          ...(current.entries[entryId] || {}),
+          ...patch,
+          updatedAt: now,
+        },
+      },
+    };
+
+    writeLocalShareVault(next);
+    setShareVault(next);
+
+    if (encryptionKey) {
+      try {
+        await pushRemoteShareVault(next, encryptionKey);
+      } catch (err) {
+        console.warn('Share vault update push failed:', err);
+      }
+    }
+
+    return next.entries[entryId];
+  }, [encryptionKey]);
+
   const requestRegisterOtp = useCallback(async (email) => {
     const response = await authAPI.requestRegisterOtp(email);
     return response.data;
@@ -123,6 +197,7 @@ export function AuthProvider({ children }) {
       setUser(null);
       setEncryptionKey(null);
       sessionStorage.removeItem(ENC_KEY_STORAGE);
+      setShareVault(readLocalShareVault());
       loggingOutRef.current = false;
     }
   }, []);
@@ -160,6 +235,15 @@ export function AuthProvider({ children }) {
     // Update encryption key in memory
     storeEncryptionKey(newEncKey);
 
+    // Re-encrypt and push share vault with new encryption key so cross-device
+    // share sync keeps working after password change.
+    try {
+      const vault = readLocalShareVault();
+      await pushRemoteShareVault(vault, newEncKey);
+    } catch (vaultErr) {
+      console.warn('Failed to re-encrypt share vault after password change:', vaultErr);
+    }
+
     return response.data;
   }, [user, encryptionKey, storeEncryptionKey]);
 
@@ -167,7 +251,10 @@ export function AuthProvider({ children }) {
     user,
     encryptionKey,
     loading,
+    shareVault,
     isAuthenticated: !!user && !!encryptionKey,
+    getShareInfo,
+    upsertShareInfo,
     requestRegisterOtp,
     register,
     login,

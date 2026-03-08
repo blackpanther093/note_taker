@@ -63,8 +63,6 @@ const BG_PATTERNS = [
   { name: 'Grid', value: 'linear-gradient(#eee 1px, transparent 1px), linear-gradient(90deg, #eee 1px, transparent 1px)' },
 ];
 
-const SHARE_KEY_STORE = 'share_keys_by_entry_v1';
-
 function toBase64Url(b64) {
   return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
@@ -72,19 +70,6 @@ function toBase64Url(b64) {
 function fromBase64Url(token) {
   const normalized = token.replace(/-/g, '+').replace(/_/g, '/');
   return normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
-}
-
-function readShareStore() {
-  try {
-    const raw = localStorage.getItem(SHARE_KEY_STORE);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-function writeShareStore(store) {
-  localStorage.setItem(SHARE_KEY_STORE, JSON.stringify(store));
 }
 
 function hexToRgb(hex) {
@@ -116,7 +101,13 @@ function getContrastTextColor(backgroundHex) {
 export default function EntryEditor() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { encryptionKey, isAuthenticated, loading: authLoading } = useAuth();
+  const {
+    encryptionKey,
+    isAuthenticated,
+    loading: authLoading,
+    getShareInfo,
+    upsertShareInfo,
+  } = useAuth();
   const { theme } = useTheme();
 
   const isNew = !id || id === 'new';
@@ -405,8 +396,7 @@ export default function EntryEditor() {
 
       // Keep shared link content in sync with latest edits when share key is available locally.
       try {
-        const shareStore = readShareStore();
-        const shareInfo = shareStore[entryId];
+        const shareInfo = getShareInfo(entryId);
         if (shareInfo?.key) {
           const shareKey = base64ToArray(fromBase64Url(shareInfo.key));
           const shareContent = await encryptWithShareKey(contentPayload, shareKey);
@@ -465,6 +455,7 @@ export default function EntryEditor() {
     bgPattern,
     bgImage,
     fontFamily,
+    getShareInfo,
     entryId,
     title,
     mood,
@@ -472,6 +463,7 @@ export default function EntryEditor() {
     entryDate,
     isNew,
     buildSnapshot,
+    upsertShareInfo,
   ]);
 
   const handleDownload = async () => {
@@ -522,8 +514,7 @@ export default function EntryEditor() {
     setSharing(true);
 
     try {
-      const shareStore = readShareStore();
-      const existing = shareStore[entryId];
+      const existing = getShareInfo(entryId);
       const shareKey = existing?.key
         ? base64ToArray(fromBase64Url(existing.key))
         : generateShareKey();
@@ -559,13 +550,12 @@ export default function EntryEditor() {
 
       const shareKeyBase64Url = toBase64Url(arrayToBase64(shareKey));
 
-      // Persist share key locally for live share sync during future saves.
-      shareStore[entryId] = {
+      // Persist encrypted share vault so other devices can sync after login.
+      await upsertShareInfo(entryId, {
         shareId: response.data.share_id,
         key: shareKeyBase64Url,
         allowDownload,
-      };
-      writeShareStore(shareStore);
+      });
 
       const baseUrl = window.location.origin;
       const link = `${baseUrl}/share/${response.data.share_id}#k=${shareKeyBase64Url}`;

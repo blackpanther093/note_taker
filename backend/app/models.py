@@ -34,6 +34,7 @@ class User(db.Model):
 
     entries = db.relationship('JournalEntry', backref='user', lazy='dynamic', cascade='all, delete-orphan')
     sessions = db.relationship('UserSession', backref='user', lazy='dynamic', cascade='all, delete-orphan')
+    share_vault = db.relationship('UserShareVault', backref='user', uselist=False, cascade='all, delete-orphan')
 
 
 class JournalEntry(db.Model):
@@ -169,4 +170,28 @@ class SharedEntry(db.Model):
     __table_args__ = (
         db.Index('idx_entry', 'entry_id'),
         db.Index('idx_user', 'user_id'),
+    )
+
+
+class UserShareVault(db.Model):
+    __tablename__ = 'user_share_vaults'
+
+    id = db.Column(db.String(36), primary_key=True, default=generate_uuid)
+    user_id = db.Column(
+        db.String(36),
+        db.ForeignKey('users.id', ondelete='CASCADE'),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    encrypted_vault = db.Column(
+        db.LargeBinary().with_variant(LONGBLOB, 'mysql'),
+        nullable=False,
+    )
+    iv = db.Column(db.LargeBinary(12), nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(
+        db.DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
