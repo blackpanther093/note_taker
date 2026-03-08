@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  # MySQL Database
+  db:
+    image: mysql:8.0
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: my_journal
+      MYSQL_USER: journal_user
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-strongpassword}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    command: >
+      --default-authentication-plugin=mysql_native_password
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --max-allowed-packet=64M
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for sessions and rate limiting
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+
+  # Flask Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: always
+    environment:
+      - FLASK_ENV=production
+      - SECRET_KEY=${SECRET_KEY}
+      - DATABASE_URL=mysql+pymysql://journal_user:${MYSQL_PASSWORD:-strongpassword}@db:3306/my_journal
+      - REDIS_URL=redis://redis:6379/0
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-https://your-domain.com}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    ports:
+      - "8000:8000"
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./frontend/build:/var/www/my-journal/frontend/build:ro
+      - ./deploy/certs:/etc/letsencrypt:ro
+    depends_on:
+      - backend
+
+volumes:
+  mysql_data:
+  redis_data:

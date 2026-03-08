@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+venv/
+.venv/
+__pycache__/
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Build outputs
+frontend/build/
+*.pyc
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Uploads (encrypted blobs, not needed in repo)
+uploads/
