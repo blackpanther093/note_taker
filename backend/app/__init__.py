@@ -148,6 +148,7 @@ def create_app(config_name=None):
     csrf.exempt(entries_bp)
     csrf.exempt(assets_bp)
     csrf.exempt(shares_bp)
+    csrf.exempt(admin_bp)
 
     # Create tables automatically only in development
     # In production, run init_db.py once via shell or temporary startup script

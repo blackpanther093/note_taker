@@ -10,7 +10,7 @@ load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env'))
 _db_url = URL.create(
     drivername='mysql+pymysql',
     username=os.environ.get('DB_USER', 'root'),
-    password=os.environ.get('DB_PASSWORD', 'Goy@l123'),
+    password=os.environ.get('DB_PASSWORD', 'Password'),
     host=os.environ.get('DB_HOST', 'localhost'),
     port=int(os.environ.get('DB_PORT', 3306)),
     database=os.environ.get('DB_NAME', 'my_journal'),

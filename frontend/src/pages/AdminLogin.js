@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { adminAPI } from '../api/adminClient';
-import { Lock, AlertCircle } from 'lucide-react';
+import { Lock, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import './AdminLogin.css';
 
 export default function AdminLogin() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
@@ -29,7 +30,12 @@ export default function AdminLogin() {
 
       navigate('/admin/dashboard');
     } catch (err) {
-      setError(err.response?.data?.error || 'Login failed');
+      const apiError = err.response?.data?.error || 'Login failed';
+      if (err.response?.status === 400 && typeof apiError === 'string' && apiError.toLowerCase().includes('csrf')) {
+        setError('Admin login blocked by security policy. Redeploy backend with admin API CSRF exemption.');
+      } else {
+        setError(apiError);
+      }
     } finally {
       setLoading(false);
     }
@@ -68,16 +74,28 @@ export default function AdminLogin() {
 
           <div className="form-group">
             <label htmlFor="password">Password</label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter admin password"
-              disabled={loading}
-              autoComplete="current-password"
-              required
-            />
+            <div className="password-input-wrap">
+              <input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter admin password"
+                disabled={loading}
+                autoComplete="current-password"
+                required
+              />
+              <button
+                type="button"
+                className="password-toggle-btn"
+                onClick={() => setShowPassword((prev) => !prev)}
+                disabled={loading}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                title={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </div>
 
           <button type="submit" disabled={loading} className="admin-login-btn">
