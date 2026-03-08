@@ -1,4 +1,5 @@
 import os
+import hashlib
 from datetime import timedelta
 from dotenv import load_dotenv
 from sqlalchemy.engine import URL
@@ -17,7 +18,16 @@ _db_url = URL.create(
 )
 
 class Config:
-    SECRET_KEY = os.environ.get('SECRET_KEY', os.urandom(64).hex())
+    # IMPORTANT: secret must be stable across all workers/processes.
+    # Random per-process fallback causes intermittent 401/logouts.
+    _secret_from_env = os.environ.get('SECRET_KEY', '').strip()
+    if _secret_from_env:
+        SECRET_KEY = _secret_from_env
+    else:
+        # Stable fallback for misconfigured environments.
+        # This keeps sessions consistent across workers until env is fixed.
+        _seed = os.environ.get('DB_PASSWORD', 'local-dev-seed')
+        SECRET_KEY = hashlib.sha256(f'journal:{_seed}'.encode('utf-8')).hexdigest()
 
     # Database
     SQLALCHEMY_DATABASE_URI = _db_url

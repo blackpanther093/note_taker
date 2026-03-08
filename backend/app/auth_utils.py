@@ -138,26 +138,10 @@ def get_current_user_id() -> str | None:
         session.clear()
         return None
 
-    # Optional strict binding checks (disabled by default in production)
-    if current_app.config.get('SESSION_BIND_IP', False):
-        current_ip = _get_client_ip()
-        if user_session.ip_address != current_ip:
-            # IP mismatch - potential session hijacking
-            db.session.delete(user_session)
-            db.session.commit()
-            session.clear()
-            return None
-
-    if current_app.config.get('SESSION_BIND_USER_AGENT', False):
-        current_ua = request.headers.get('User-Agent', '')
-        if user_session.user_agent_hash:
-            current_ua_hash = _hash_user_agent(current_ua)
-            if user_session.user_agent_hash != current_ua_hash:
-                # User-Agent mismatch - potential session hijacking
-                db.session.delete(user_session)
-                db.session.commit()
-                session.clear()
-                return None
+    # Do not invalidate active sessions on IP/User-Agent drift.
+    # In production behind proxies/mobile networks/device emulation,
+    # these values can change mid-session and cause false 401 logouts.
+    # Session validity is enforced by signed cookie + DB session row + expiry.
 
     return user_id
 
