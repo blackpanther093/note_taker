@@ -1,7 +1,11 @@
 """Journal entry routes."""
 import base64
 from datetime import datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
+try:
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+except Exception:  # pragma: no cover
+    ZoneInfo = None
+    ZoneInfoNotFoundError = Exception
 
 from flask import Blueprint, request, jsonify, current_app
 
@@ -12,7 +16,10 @@ from app.auth_utils import login_required
 entries_bp = Blueprint('entries', __name__)
 
 ENTRIES_PER_PAGE = 20
-IST = ZoneInfo('Asia/Kolkata')
+try:
+    IST = ZoneInfo('Asia/Kolkata') if ZoneInfo else timezone(timedelta(hours=5, minutes=30))
+except ZoneInfoNotFoundError:
+    IST = timezone(timedelta(hours=5, minutes=30))
 
 
 @entries_bp.route('', methods=['GET'])

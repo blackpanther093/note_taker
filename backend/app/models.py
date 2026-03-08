@@ -1,6 +1,10 @@
 import uuid
-from datetime import datetime, timezone
-from zoneinfo import ZoneInfo
+from datetime import datetime, timezone, timedelta
+try:
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+except Exception:  # pragma: no cover
+    ZoneInfo = None
+    ZoneInfoNotFoundError = Exception
 from app import db
 from sqlalchemy.dialects.mysql import LONGBLOB
 
@@ -9,7 +13,11 @@ def generate_uuid():
     return str(uuid.uuid4())
 
 
-IST = ZoneInfo('Asia/Kolkata')
+try:
+    IST = ZoneInfo('Asia/Kolkata') if ZoneInfo else timezone(timedelta(hours=5, minutes=30))
+except ZoneInfoNotFoundError:
+    # Fallback for environments without IANA tz database (e.g., missing tzdata)
+    IST = timezone(timedelta(hours=5, minutes=30))
 
 
 def now_ist():
