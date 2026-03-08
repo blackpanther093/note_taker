@@ -34,26 +34,40 @@ export function AuthProvider({ children }) {
     if (initRef.current) return;
     initRef.current = true;
 
-    authAPI.me()
-      .then(res => {
-        // Restore encryption key from sessionStorage if available
+    const initializeAuth = async () => {
+      try {
+        const res = await authAPI.me();
         const storedKey = sessionStorage.getItem(ENC_KEY_STORAGE);
         if (storedKey) {
           setUser(res.data.user);
           setEncryptionKey(base64ToArray(storedKey));
         } else {
-          // Session exists but no encryption key
-          // Don't force logout - just set user without encryption key
           console.warn('Valid session but no encryption key');
           setUser(res.data.user);
           setEncryptionKey(null);
         }
-      })
-      .catch(() => {
-        setUser(null);
-        sessionStorage.removeItem(ENC_KEY_STORAGE);
-      })
-      .finally(() => setLoading(false));
+      } catch {
+        // Retry once to avoid false logout on transient startup/network errors
+        try {
+          const res = await authAPI.me();
+          const storedKey = sessionStorage.getItem(ENC_KEY_STORAGE);
+          if (storedKey) {
+            setUser(res.data.user);
+            setEncryptionKey(base64ToArray(storedKey));
+          } else {
+            setUser(res.data.user);
+            setEncryptionKey(null);
+          }
+        } catch {
+          setUser(null);
+          sessionStorage.removeItem(ENC_KEY_STORAGE);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    initializeAuth();
   }, []);
 
   const storeEncryptionKey = useCallback((key) => {

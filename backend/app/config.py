@@ -1,4 +1,5 @@
 import os
+import hashlib
 from datetime import timedelta
 from dotenv import load_dotenv
 from sqlalchemy.engine import URL
@@ -13,10 +14,20 @@ _db_url = URL.create(
     host=os.environ.get('DB_HOST', 'localhost'),
     port=int(os.environ.get('DB_PORT', 3306)),
     database=os.environ.get('DB_NAME', 'my_journal'),
+    query={'charset': 'utf8mb4'},
 )
 
 class Config:
-    SECRET_KEY = os.environ.get('SECRET_KEY', os.urandom(64).hex())
+    # IMPORTANT: secret must be stable across all workers/processes.
+    # Random per-process fallback causes intermittent 401/logouts.
+    _secret_from_env = os.environ.get('SECRET_KEY', '').strip()
+    if _secret_from_env:
+        SECRET_KEY = _secret_from_env
+    else:
+        # Stable fallback for misconfigured environments.
+        # This keeps sessions consistent across workers until env is fixed.
+        _seed = os.environ.get('DB_PASSWORD', 'local-dev-seed')
+        SECRET_KEY = hashlib.sha256(f'journal:{_seed}'.encode('utf-8')).hexdigest()
 
     # Database
     SQLALCHEMY_DATABASE_URI = _db_url
@@ -38,6 +49,11 @@ class Config:
     PERMANENT_SESSION_LIFETIME = timedelta(
         minutes=int(os.environ.get('SESSION_LIFETIME_MINUTES', 60))
     )
+
+    # Session binding controls. Strict IP/UA binding can cause false logouts
+    # on mobile networks, proxies, VPN changes, or browser device emulation.
+    SESSION_BIND_IP = os.environ.get('SESSION_BIND_IP', '0').lower() in ('1', 'true', 'yes')
+    SESSION_BIND_USER_AGENT = os.environ.get('SESSION_BIND_USER_AGENT', '0').lower() in ('1', 'true', 'yes')
 
     # Security
     WTF_CSRF_TIME_LIMIT = 3600
